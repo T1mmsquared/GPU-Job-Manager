@@ -16,11 +16,13 @@ from app.services.jobs import create_job, get_job, list_jobs, delete_job
 from app.routes.auth import router as auth_router
 from worker.tasks import run_job  # shared task definition
 
-app = FastAPI(title="gpu-job-management-api")
+app = FastAPI()
+
 app.include_router(auth_router)
 
+
 @app.get("/health")
-def health():
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 @app.post("/jobs", response_model=JobResponse)

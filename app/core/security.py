@@ -1,26 +1,39 @@
+import os
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt, JWTError
-from passlib.context import CryptContext
+import jwt
+from jwt.exceptions import InvalidTokenError
+from pwdlib import PasswordHash
 
-from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-env")
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+password_hash = PasswordHash.recommended()
+DUMMY_HASH = password_hash.hash("not-the-real-password")
 
-def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+
+def get_password_hash(password: str) -> str:
+    return password_hash.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return password_hash.verify(plain_password, hashed_password)
+
+
+def verify_password_against_dummy(password: str) -> None:
+    password_hash.verify(password, DUMMY_HASH)
+
 
 def create_access_token(subject: str) -> str:
-    now = datetime.now(timezone.utc)
-    exp = now + timedelta(minutes=int(getattr(settings, "JWT_EXPIRES_MINUTES", 60)))
-    payload = {"sub": subject, "iat": int(now.timestamp()), "exp": exp}
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": subject, "exp": expire}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-def decode_token(token: str) -> dict:
+
+def decode_access_token(token: str) -> dict:
     try:
-        return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-    except JWTError as e:
-        raise ValueError("Invalid token") from e
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except InvalidTokenError as exc:
+        raise ValueError("Invalid token") from exc
