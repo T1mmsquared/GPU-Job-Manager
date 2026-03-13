@@ -1,7 +1,3 @@
-build:
-  context: .
-  dockerfile: Dockerfile
-
 services:
   db:
     image: postgres:16
