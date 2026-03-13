@@ -1,82 +1,96 @@
 import time
 import uuid
-from datetime import datetime, timezone
 
-import app.models  # noqa: F401
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
-from app.core.db import SessionLocal
-from app.models.job import Job, JobStatus
+from app.core.config import settings
+from app.models.enums import JobStatus
+from app.models.job import Job
+from app.models.job_event import JobEvent
+from app.models.result_artifact import ResultArtifact
 from worker.celery_app import celery_app
 
-
-def _db() -> Session:
-    return SessionLocal()
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+SYNC_DATABASE_URL = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+engine = create_engine(SYNC_DATABASE_URL, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-@celery_app.task(name="run_job")
-def run_job(job_id: str):
-    db = _db()
+@celery_app.task(name="run_job", bind=True)
+def run_job(self, job_id: str) -> None:
+    db = SessionLocal()
     try:
-        jid = uuid.UUID(job_id)
-        job: Job | None = db.get(Job, jid)
-        if not job:
+        job = db.execute(
+            select(Job).where(Job.id == uuid.UUID(job_id))
+        ).scalar_one_or_none()
+        if job is None:
             return
 
-        if not job.artifacts:
-            raise ValueError("Job artifacts record is missing")
-
-        job.status = JobStatus.RUNNING.value
-        job.started_at = utc_now()
-        job.updated_at = utc_now()
+        job.celery_task_id = self.request.id
+        job.status = JobStatus.running
+        job.gpu_id = "local-sim"
+        db.add(
+            JobEvent(
+                job_id=job.id,
+                event_type="running",
+                payload={
+                    "celery_task_id": self.request.id,
+                    "gpu_id": job.gpu_id,
+                },
+            )
+        )
         db.commit()
-        db.refresh(job)
 
-        payload = job.artifacts.input or {}
+        if job.params.get("should_fail") is True:
+            raise ValueError("Simulated failure requested")
 
-        if job.job_type == "test_sleep":
-            seconds = int(payload.get("seconds", 5))
-            seconds = max(0, min(seconds, 60))
-            time.sleep(seconds)
-            job.artifacts.output = {"slept_seconds": seconds}
+        time.sleep(5)
 
-        elif job.job_type == "validate_payload":
-            required = payload.get("required_value")
-            if required is None:
-                raise ValueError("payload.required_value is required")
-            job.artifacts.output = {
-                "valid": True,
-                "required_value": required,
-            }
+        artifact = db.execute(
+            select(ResultArtifact).where(ResultArtifact.job_id == job.id)
+        ).scalar_one_or_none()
 
+        if artifact is None:
+            artifact = ResultArtifact(
+                job_id=job.id,
+                storage_path=f"/artifacts/{job.id}/result.json",
+                mime_type="application/json",
+            )
+            db.add(artifact)
         else:
-            raise ValueError(f"Unsupported job_type: {job.job_type}")
+            artifact.storage_path = f"/artifacts/{job.id}/result.json"
+            artifact.mime_type = "application/json"
 
-        job.status = JobStatus.SUCCEEDED.value
-        job.finished_at = utc_now()
-        job.updated_at = utc_now()
-        job.error = None
+        job.status = JobStatus.succeeded
+        db.add(
+            JobEvent(
+                job_id=job.id,
+                event_type="succeeded",
+                payload={
+                    "message": "completed",
+                    "simulated": True,
+                    "storage_path": artifact.storage_path,
+                    "mime_type": artifact.mime_type,
+                },
+            )
+        )
         db.commit()
 
     except Exception as e:
         db.rollback()
-        try:
-            jid = uuid.UUID(job_id)
-            job = db.get(Job, jid)
-            if job:
-                job.status = JobStatus.FAILED.value
-                job.finished_at = utc_now()
-                job.updated_at = utc_now()
-                job.error = str(e)
-                db.commit()
-        finally:
-            db.close()
+        job = db.execute(
+            select(Job).where(Job.id == uuid.UUID(job_id))
+        ).scalar_one_or_none()
+        if job is not None:
+            job.status = JobStatus.failed
+            db.add(
+                JobEvent(
+                    job_id=job.id,
+                    event_type="failed",
+                    payload={"error": str(e)},
+                )
+            )
+            db.commit()
         raise
-
     finally:
-        if db.is_active:
-            db.close()
+        db.close()

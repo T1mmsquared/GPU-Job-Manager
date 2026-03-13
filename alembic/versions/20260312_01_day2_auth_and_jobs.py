@@ -16,7 +16,7 @@ branch_labels = None
 depends_on = None
 
 
-job_status_enum = sa.Enum(
+job_status_enum = postgresql.ENUM(
     "queued",
     "assigned",
     "running",
@@ -24,6 +24,7 @@ job_status_enum = sa.Enum(
     "failed",
     "cancelled",
     name="job_status",
+    create_type=False,
 )
 
 

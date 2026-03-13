@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import JobStatus
 
@@ -28,4 +28,19 @@ class JobEventResponse(BaseModel):
     job_id: uuid.UUID
     event_type: str
     payload: dict[str, Any] | None
+    created_at: datetime
+
+
+class JobSubmit(BaseModel):
+    model_name: str
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResultArtifactResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    job_id: uuid.UUID
+    storage_path: str
+    mime_type: str | None
     created_at: datetime

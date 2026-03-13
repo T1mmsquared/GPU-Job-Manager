@@ -1,199 +1,189 @@
-\# gpu-job-manager
-
-
+# GPU Job Manager
 
 GPU Job Manager is an authenticated backend system for submitting, tracking, and executing asynchronous GPU model jobs.
 
-
-
 It combines the API and persistence foundation from gpu-job-management-api with worker-side execution logic adapted from League of Doom.
 
+## Current status
+
+The project now has a working backend vertical slice.
+
+Completed so far:
+- Docker Compose stack for API, worker, PostgreSQL, and Redis.
+- Alembic-backed database schema and migrations.
+- JWT-based authentication.
+- Protected job APIs.
+- Job creation, listing, and detail lookup.
+- Job event history endpoint.
+- Result artifact endpoint.
+- Simulated worker execution through Celery.
+- Success lifecycle validation.
+- Failure lifecycle validation with `should_fail=true`.
+- Delete endpoint with ownership checks and state rules.
+- Running-job delete protection (`409 Conflict`).
+
+Validated behavior:
+- A user can register and log in.
+- A user can submit a job.
+- The worker moves jobs from `queued` to `running` to `succeeded` or `failed`.
+- `/jobs/{job_id}/events` returns lifecycle history.
+- `/jobs/{job_id}/artifact` returns artifact metadata for successful jobs.
+- Failed jobs do not create artifacts.
+- `DELETE /jobs/{job_id}` returns `204 No Content` for succeeded and failed jobs.
+- `DELETE /jobs/{job_id}` returns `409 Conflict` for running jobs.
+
+## Implemented routes
+
+### Auth
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
 
+### Jobs
+- `POST /jobs`
+- `GET /jobs`
+- `GET /jobs/{job_id}`
+- `GET /jobs/{job_id}/events`
+- `GET /jobs/{job_id}/artifact`
+- `DELETE /jobs/{job_id}`
 
-The v1 goal is a narrow vertical slice:
+### System
+- `GET /health`
 
-\- A user logs in.
+## Current lifecycle
 
-\- A user submits a GPU job.
+Current job statuses in use:
+- `queued`
+- `running`
+- `succeeded`
+- `failed`
+
+Planned next lifecycle states and controls:
+- `cancelled`
+- Job cancellation flow for running work.
+- Future GPU assignment and scheduling expansion.
 
-\- The system stores and tracks the job lifecycle.
+## What to do next
 
-\- A worker executes one real model task on one GPU.
+Recommended next steps, in order:
+1. Add `POST /jobs/{job_id}/cancel` or a similar cancellation route.
+2. Wire cancellation into the Celery worker path and persisted job events.
+3. Explicitly verify cascade behavior on deleted jobs for events and artifacts.
+4. Replace the simulated worker path with a more real model execution path.
+5. Add a tiny demo UI for login, submission, and tracking.
+6. Add clearer GPU assignment behavior beyond `gpu_id="local-sim"`.
+7. Prepare deployment and architecture deliverables.
 
-\- The API exposes status, progress, events, and result artifacts.
+## Resume checklist
 
+When you come back to the project, use this order:
+1. Start the containers.
+2. Confirm API health.
+3. Register or log in.
+4. Export a fresh token.
+5. Submit success and failure jobs.
+6. Validate lifecycle endpoints.
+7. Validate delete behavior.
+8. Continue with cancellation work.
 
+## Working bash scripts
 
-\## V1 Scope
+These commands are meant to be copied step by step on Ubuntu/Linux from the repo root.
 
+### 
+1) Start the stack
 
+```bash
+docker compose up -d --build
+docker compose ps
 
-Version 1 focuses on a single end-to-end path that works reliably.
+2) Recreate only the API after code changes
+bash
+docker compose up -d --force-recreate api
+docker compose ps
 
+3) Recreate only the worker after task changes
+bash
+docker compose up -d --force-recreate worker
+docker compose ps
 
 
-Included in v1:
+## Scripts
 
-\- FastAPI backend as the main job submission and tracking surface.
+The `scripts/` folder contains small helpers to restart the stack, log in, and run a backend smoke test.
 
-\- PostgreSQL for durable job state.
+### Prerequisites
 
-\- Alembic for schema migrations.
+- Docker and Docker Compose installed.
+- Python 3 available on the host (for simple JSON parsing in scripts).
+- `.env` configured for the API and worker as described elsewhere in this README.
 
-\- Redis and Celery for background job execution.
+### scripts/resume.sh
 
-\- JWT-based authentication.
+Restart the stack and wait for the API to come up.
 
-\- Protected job APIs.
+```bash
+./scripts/resume.sh up    # build + start all services
+./scripts/resume.sh api   # recreate only the api service
+./scripts/resume.sh worker  # recreate only the worker
+./scripts/resume.sh all   # recreate all services
 
-\- One real worker execution path adapted from League of Doom.
 
-\- A simple demo frontend for login, submission, and job tracking.
+This script:
 
+runs docker compose up with the selected mode,
 
+prints docker compose ps,
 
-Out of scope for v1:
+polls http://localhost:8000/docs until the API is responding.
 
-\- Multi-GPU execution for a single job.
+scripts/login.sh
+Register (if needed) and log in, then print export commands for a token.
 
-\- Smart scheduling and balancing.
+bash
+./scripts/login.sh
+Example usage in a new shell:
 
-\- Fancy frontend design.
+bash
+eval "$(./scripts/login.sh | tail -n 4)"
+This sets:
 
-\- Complex retries and failure recovery.
+bash
+export BASE_URL="http://localhost:8000"
+export EMAIL="you@example.com"
+export PASSWORD="Strong#Pass123"
+export TOKEN="<jwt>"
+scripts/smoke_test.sh
+End-to-end backend smoke test using the current TOKEN:
 
-\- Production cloud deployment.
+bash
+./scripts/smoke_test.sh
+This script:
 
-\- Multi-tenant administration features.
+Submits one “success” job.
 
+Submits one “failure” job (using should_fail=true).
 
+Waits for both to complete.
 
-\## Core Flow
+Fetches job detail, events, and artifact for each.
 
+Deletes both jobs and verifies they are gone.
 
+Submits a “running” job candidate.
 
-1\. The user authenticates.
+Attempts to delete the running job and expects 409 Conflict.
 
-2\. The user submits a job payload.
+Prints recent API and worker logs.
 
-3\. The API stores the job in PostgreSQL with an initial queued status.
+If TOKEN is not set, the script will exit and tell you to run login.sh first.
 
-4\. A Celery worker picks up the job.
+Notes on shell scripts
+All scripts are written for bash and expect LF (Unix) line endings.
 
-5\. The worker assigns a GPU and runs the model task.
+If you edit scripts on Windows, ensure your editor is configured to save with LF only.
 
-6\. Progress and events are written back to the database.
-
-7\. The user checks job status and retrieves the result artifact.
-
-
-
-\## Initial Routes
-
-
-
-\### Auth
-
-\- `POST /auth/register`
-
-\- `POST /auth/login`
-
-\- `GET /auth/me`
-
-
-
-\### Jobs
-
-\- `POST /jobs`
-
-\- `GET /jobs`
-
-\- `GET /jobs/{id}`
-
-\- `GET /jobs/{id}/events`
-
-
-
-\### System
-
-\- `GET /health`
-
-
-
-\## Job Lifecycle
-
-
-
-The initial v1 job status enum is:
-
-\- `queued`
-
-\- `assigned`
-
-\- `running`
-
-\- `succeeded`
-
-\- `failed`
-
-\- `cancelled`
-
-
-
-\## Initial Job Payload
-
-
-
-```json
-
-{
-
-&nbsp; "model\_name": "string",
-
-&nbsp; "params": {},
-
-&nbsp; "gpu\_preference": "string or null",
-
-&nbsp; "priority": 0
-
-}
-
-
-
-Source Map
-
-Keep from gpu-job-management-api:
-
-
-
--app/main.py
-
--core/
-
--models/
-
--schemas/
-
--routes/
-
--services/
-
--Docker/Postgres/Alembic foundation
-
-
-
-Adapt from League of Doom:
-
-
-
--orchestrator/ into worker execution logic
-
--selected routing logic for future affinity rules
-
--model-serving scripts/configs as worker-side assets
-
--League of Doom stays behind the job manager as the execution layer, not the main app shell.
-
+If you ever see errors like bad interpreter: Text file busy or set: pipefail, check and normalize line endings (dos2unix scripts/*.sh).
 
 
 Repo Shape
@@ -235,28 +225,48 @@ gpu-job-manager/
 └── README.md
 
 
+Notes
+Prefer one-line commands or clean single-backslash multiline commands in Bash.
+
+Avoid double backslashes in pasted shell commands.
+
+Re-login after restarting or recreating services if you no longer have a valid token in your shell.
+
+Re-register only if login says the user does not exist or the database was reset.
 
 
+Near-term deliverables
+Backend deliverables now mostly complete:
 
-Status
+Auth.
 
+Protected job APIs.
 
+Worker execution.
 
-Day 1 locks the contract and repo structure.
+Success and failure lifecycle.
 
-Day 2 adds schema and authentication.
+Events and artifact reads.
 
-Day 3 adds protected job APIs.
-
-Day 4 wires Celery and Redis.
-
-Day 5 integrates one real worker path.
-
-Day 6 adds the demo frontend.
-
-Day 7 hardens and packages the demo.
+Delete rules.
 
 
+Remaining short-term deliverables:
+
+Cancel running jobs.
+
+Real workload execution path.
+
+Simple demo UI.
+
+Clearer GPU assignment flow.
 
 
+Longer-term deliverables
+Better scheduling and queueing.
 
+Cloud deployment.
+
+Architecture diagram.
+
+Portfolio/demo polish.

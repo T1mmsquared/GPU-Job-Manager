@@ -10,6 +10,7 @@ ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+DUMMY_HASH = pwd_context.hash("not-the-real-password")
 
 
 def get_password_hash(password: str) -> str:
@@ -18,6 +19,10 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def verify_password_against_dummy(password: str) -> None:
+    pwd_context.verify(password, DUMMY_HASH)
 
 
 def create_access_token(subject: str) -> str:

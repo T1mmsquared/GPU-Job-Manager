@@ -62,4 +62,5 @@ class Job(Base):
         back_populates="job",
         cascade="all, delete-orphan",
         uselist=False,
+        single_parent=True,
     )
