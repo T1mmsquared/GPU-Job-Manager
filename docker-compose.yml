@@ -75,6 +75,7 @@ services:
     command: >
       celery -A worker.celery_app.celery_app worker
       --loglevel=INFO
+      --statedb=/tmp/celery-worker.state
     restart: unless-stopped
 
 

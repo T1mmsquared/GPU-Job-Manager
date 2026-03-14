@@ -185,3 +185,75 @@ async def delete_job(
     await db.delete(job)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post("/{job_id}/cancel", response_model=JobResponse)
+async def cancel_job(
+    job_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> JobResponse:
+    result = await db.execute(
+        select(Job).where(
+            Job.id == job_id,
+            Job.owner_id == current_user.id,
+        )
+    )
+    job = result.scalar_one_or_none()
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+
+    if job.status in {JobStatus.succeeded, JobStatus.failed, JobStatus.cancelled}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Job cannot be cancelled in its current state",
+        )
+
+    if job.status == JobStatus.queued:
+        job.cancel_requested = True
+        job.status = JobStatus.cancelled
+
+        if job.celery_task_id:
+            celery_app.control.revoke(job.celery_task_id)
+
+        db.add(
+            JobEvent(
+                job_id=job.id,
+                event_type="cancelled",
+                payload={
+                    "source": "api",
+                    "celery_task_id": job.celery_task_id,
+                    "reason": "cancelled before execution",
+                },
+            )
+        )
+
+        await db.commit()
+        await db.refresh(job)
+        return job
+
+    if job.status == JobStatus.running:
+        job.cancel_requested = True
+
+        db.add(
+            JobEvent(
+                job_id=job.id,
+                event_type="cancel_requested",
+                payload={
+                    "source": "api",
+                    "celery_task_id": job.celery_task_id,
+                },
+            )
+        )
+
+        await db.commit()
+        await db.refresh(job)
+        return job
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Job cannot be cancelled in its current state",
+    )

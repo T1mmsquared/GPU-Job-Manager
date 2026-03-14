@@ -19,6 +19,7 @@ class JobResponse(BaseModel):
     gpu_id: str | None
     created_at: datetime
     updated_at: datetime
+    cancel_requested: bool
 
 
 class JobEventResponse(BaseModel):

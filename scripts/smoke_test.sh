@@ -76,6 +76,73 @@ curl -s "$BASE_URL/jobs/$RUNNING_JOB_ID" -H "Authorization: Bearer $TOKEN" ; ech
 curl -s "$BASE_URL/jobs/$RUNNING_JOB_ID/events" -H "Authorization: Bearer $TOKEN" ; echo
 
 echo
-echo "== logs =="
-docker compose logs --tail=40 api
-docker compose logs --tail=40 worker
+echo "== queued cancel test =="
+docker compose stop worker
+
+QUEUED_CANCEL_JOB_JSON="$(curl -s -X POST "$BASE_URL/jobs" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"model_name":"llama3.1","params":{"prompt":"queued cancel test"}}')"
+echo "$QUEUED_CANCEL_JOB_JSON"
+QUEUED_CANCEL_JOB_ID="$(echo "$QUEUED_CANCEL_JOB_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")"
+echo "QUEUED_CANCEL_JOB_ID=$QUEUED_CANCEL_JOB_ID"
+
+curl -s -X POST "$BASE_URL/jobs/$QUEUED_CANCEL_JOB_ID/cancel" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+curl -s "$BASE_URL/jobs/$QUEUED_CANCEL_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+curl -s "$BASE_URL/jobs/$QUEUED_CANCEL_JOB_ID/events" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+bash scripts/resume.sh worker
+sleep 3
+
+curl -s "$BASE_URL/jobs/$QUEUED_CANCEL_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+curl -s "$BASE_URL/jobs/$QUEUED_CANCEL_JOB_ID/events" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+echo
+echo "== running cancel test =="
+RUNNING_CANCEL_JOB_JSON="$(curl -s -X POST "$BASE_URL/jobs" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"model_name":"llama3.1","params":{"prompt":"running cancel test"}}')"
+echo "$RUNNING_CANCEL_JOB_JSON"
+RUNNING_CANCEL_JOB_ID="$(echo "$RUNNING_CANCEL_JOB_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")"
+echo "RUNNING_CANCEL_JOB_ID=$RUNNING_CANCEL_JOB_ID"
+
+sleep 1
+
+curl -s -X POST "$BASE_URL/jobs/$RUNNING_CANCEL_JOB_ID/cancel" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+sleep 2
+
+curl -s "$BASE_URL/jobs/$RUNNING_CANCEL_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+curl -s "$BASE_URL/jobs/$RUNNING_CANCEL_JOB_ID/events" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+curl -s "$BASE_URL/jobs/$RUNNING_CANCEL_JOB_ID/artifact" \
+  -H "Authorization: Bearer $TOKEN" ; echo
+
+echo
+echo "== terminal cancel should fail with 409 =="
+curl -i -X POST "$BASE_URL/jobs/$QUEUED_CANCEL_JOB_ID/cancel" \
+  -H "Authorization: Bearer $TOKEN"
+echo
+curl -i -X POST "$BASE_URL/jobs/$RUNNING_CANCEL_JOB_ID/cancel" \
+  -H "Authorization: Bearer $TOKEN"
+echo
+
+echo
+echo "== final logs =="
+docker compose logs --tail=80 api
+docker compose logs --tail=80 worker
+
+

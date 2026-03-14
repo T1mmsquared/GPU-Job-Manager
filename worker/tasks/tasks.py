@@ -25,6 +25,10 @@ def run_job(self, job_id: str) -> None:
         ).scalar_one_or_none()
         if job is None:
             return
+            
+        db.refresh(job)
+        if job.status == JobStatus.cancelled or job.cancel_requested:
+            return    
 
         job.celery_task_id = self.request.id
         job.status = JobStatus.running
@@ -44,7 +48,26 @@ def run_job(self, job_id: str) -> None:
         if job.params.get("should_fail") is True:
             raise ValueError("Simulated failure requested")
 
-        time.sleep(5)
+        for _ in range(5):
+            time.sleep(1)
+            db.refresh(job)
+
+            if job.cancel_requested:
+                job.status = JobStatus.cancelled
+                db.add(
+                    JobEvent(
+                        job_id=job.id,
+                        event_type="cancelled",
+                        payload={
+                            "message": "cancelled during execution",
+                            "celery_task_id": self.request.id,
+                            "gpu_id": job.gpu_id,
+                        },
+                    )
+                )
+                db.commit()
+                return
+
 
         artifact = db.execute(
             select(ResultArtifact).where(ResultArtifact.job_id == job.id)
