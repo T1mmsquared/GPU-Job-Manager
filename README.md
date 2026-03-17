@@ -2,13 +2,14 @@
 
 GPU Job Manager is an authenticated backend system for submitting, tracking, and executing asynchronous GPU model jobs.
 
-It combines the API and persistence foundation from gpu-job-management-api with worker-side execution logic adapted from League of Doom.
+It combines the API and persistence foundation from `gpu-job-management-api` with worker-side execution logic adapted from League of Doom.
 
 ## Current status
 
-The project now has a working backend vertical slice.
+The project now has a working backend vertical slice, plus cooperative cancellation support.
 
-Completed so far:
+### Completed so far
+
 - Docker Compose stack for API, worker, PostgreSQL, and Redis.
 - Alembic-backed database schema and migrations.
 - JWT-based authentication.
@@ -27,7 +28,8 @@ Completed so far:
 - Cancellation event history.
 - Restart-safe queued cancellation guard in the worker.
 
-Validated behavior:
+### Validated behavior
+
 - A user can register and log in.
 - A user can submit a job.
 - The worker moves jobs from `queued` to `running` to `succeeded` or `failed`.
@@ -44,11 +46,13 @@ Validated behavior:
 ## Implemented routes
 
 ### Auth
+
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /auth/me`
 
 ### Jobs
+
 - `POST /jobs`
 - `GET /jobs`
 - `GET /jobs/{job_id}`
@@ -58,18 +62,21 @@ Validated behavior:
 - `DELETE /jobs/{job_id}`
 
 ### System
+
 - `GET /health`
 
 ## Current lifecycle
 
 Current job statuses in use:
+
 - `queued`
 - `running`
 - `succeeded`
 - `failed`
 - `cancelled`
 
-Current cancellation behavior:
+### Current cancellation behavior
+
 - Queued jobs can be cancelled immediately.
 - Running jobs are cancelled cooperatively by the worker.
 - `cancel_requested` is persisted so the worker can stop safely.
@@ -78,9 +85,10 @@ Current cancellation behavior:
 ## What to do next
 
 Recommended next steps, in order:
+
 1. Explicitly verify cascade behavior on deleted jobs for events and artifacts.
 2. Replace the simulated worker path with a more real model execution path.
-3. Add a tiny demo UI for login, submission, and tracking.
+3. Finish the tiny demo UI for login, submission, and tracking.
 4. Add clearer GPU assignment behavior beyond `gpu_id="local-sim"`.
 5. Add list filtering and pagination polish where useful.
 6. Prepare deployment and architecture deliverables.
@@ -89,6 +97,7 @@ Recommended next steps, in order:
 ## Resume checklist
 
 When you come back to the project, use this order:
+
 1. Start the containers.
 2. Confirm API health.
 3. Register or log in.
@@ -101,9 +110,9 @@ When you come back to the project, use this order:
 
 These commands are meant to be copied step by step on Ubuntu/Linux from the repo root.
 
-1) Start the stack
+### 1) Start the stack
 
-bash
+```bash
 docker compose up -d --build
 docker compose ps
 
@@ -190,68 +199,64 @@ Notes on shell scripts
 
 Repo shape
 
-GPU-Job-Manager
-├── alembic
-│   ├── env.py
-│   ├── README
-│   ├── script.py.mako
-│   └── versions
-│       ├── 20260312_01_day2_auth_and_jobs.py
-│       └── 9e55a9916183_add_cancel_requested_to_jobs.py
+GPU-Job-Manager/
+├── alembic/
+│   ├── env.py
+│   ├── README
+│   ├── script.py.mako
+│   └── versions/
+│       ├── 20260312_01_day2_auth_and_jobs.py
+│       └── 9e55a9916183_add_cancel_requested_to_jobs.py
 ├── alembic.ini
-├── app
-│   ├── core
-│   │   ├── config.py
-│   │   ├── db.py
-│   │   ├── deps.py
-│   │   └── security.py
-│   ├── __init__.py
-│   ├── main.py
-│   ├── models
-│   │   ├── enums.py
-│   │   ├── gpu_assignment.py
-│   │   ├── __init__.py
-│   │   ├── job_event.py
-│   │   ├── job.py
-│   │   ├── result_artifact.py
-│   │   └── user.py
-│   ├── routes
-│   │   ├── auth.py
-│   │   └── jobs.py
-│   ├── schemas
-│   │   ├── auth.py
-│   │   └── job.py
-│   └── services
-│       ├── jobs.py
-│       └── password_policy.py
+├── app/
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── db.py
+│   │   ├── deps.py
+│   │   └── security.py
+│   ├── __init__.py
+│   ├── main.py
+│   ├── models/
+│   │   ├── enums.py
+│   │   ├── gpu_assignment.py
+│   │   ├── __init__.py
+│   │   ├── job_event.py
+│   │   ├── job.py
+│   │   ├── result_artifact.py
+│   │   └── user.py
+│   ├── routes/
+│   │   ├── auth.py
+│   │   └── jobs.py
+│   ├── schemas/
+│   │   ├── auth.py
+│   │   └── job.py
+│   └── services/
+│       ├── jobs.py
+│       └── password_policy.py
 ├── docker-compose.yml
 ├── Dockerfile
+├── frontend/
 ├── README.md
 ├── requirements.txt
-├── scripts
-│   ├── login.sh
-│   ├── resume.sh
-│   └── smoke_test.sh
-└── worker
+├── scripts/
+│   ├── login.sh
+│   ├── resume.sh
+│   └── smoke_test.sh
+└── worker/
     ├── celery_app.py
-    ├── execution
-    │   ├── __init__.py
-    │   ├── main.py
-    │   ├── planner_agent.py
-    │   ├── __pycache__
-    │   │   ├── planner_agent.cpython-312.pyc
-    │   │   └── research_agent.cpython-312.pyc
-    │   ├── research_agent.py
-    │   └── routing
-    │       ├── agent_graph.py
-    │       ├── __init__.py
-    │       └── __pycache__
-    │           ├── agent_graph.cpython-312.pyc
-    │           └── __init__.cpython-312.pyc
+    ├── execution/
+    │   ├── __init__.py
+    │   ├── main.py
+    │   ├── planner_agent.py
+    │   ├── research_agent.py
+    │   └── routing/
+    │       ├── agent_graph.py
+    │       └── __init__.py
     ├── __init__.py
-    └── tasks
+    └── tasks/
         ├── __init__.py
         └── tasks.py
+
 
 Notes
 -Prefer one-line commands or clean single-backslash multiline commands in Bash.

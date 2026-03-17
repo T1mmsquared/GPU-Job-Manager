@@ -186,6 +186,7 @@ async def delete_job(
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
 @router.post("/{job_id}/cancel", response_model=JobResponse)
 async def cancel_job(
     job_id: uuid.UUID,
@@ -193,10 +194,12 @@ async def cancel_job(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> JobResponse:
     result = await db.execute(
-        select(Job).where(
+        select(Job)
+        .where(
             Job.id == job_id,
             Job.owner_id == current_user.id,
         )
+        .with_for_update()
     )
     job = result.scalar_one_or_none()
 
@@ -216,9 +219,6 @@ async def cancel_job(
         job.cancel_requested = True
         job.status = JobStatus.cancelled
 
-        if job.celery_task_id:
-            celery_app.control.revoke(job.celery_task_id)
-
         db.add(
             JobEvent(
                 job_id=job.id,
@@ -233,24 +233,28 @@ async def cancel_job(
 
         await db.commit()
         await db.refresh(job)
+
+        if job.celery_task_id:
+            celery_app.control.revoke(job.celery_task_id, terminate=False)
+
         return job
 
     if job.status == JobStatus.running:
-        job.cancel_requested = True
-
-        db.add(
-            JobEvent(
-                job_id=job.id,
-                event_type="cancel_requested",
-                payload={
-                    "source": "api",
-                    "celery_task_id": job.celery_task_id,
-                },
+        if not job.cancel_requested:
+            job.cancel_requested = True
+            db.add(
+                JobEvent(
+                    job_id=job.id,
+                    event_type="cancel_requested",
+                    payload={
+                        "source": "api",
+                        "celery_task_id": job.celery_task_id,
+                    },
+                )
             )
-        )
+            await db.commit()
+            await db.refresh(job)
 
-        await db.commit()
-        await db.refresh(job)
         return job
 
     raise HTTPException(

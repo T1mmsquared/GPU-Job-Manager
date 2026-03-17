@@ -55,17 +55,22 @@ class Job(Base):
     )
 
     owner: Mapped["User"] = relationship(back_populates="jobs")
+
     assignments: Mapped[list["GPUAssignment"]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     events: Mapped[list["JobEvent"]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="JobEvent.created_at.asc()",
     )
     result_artifact: Mapped["ResultArtifact | None"] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
+        passive_deletes=True,
         uselist=False,
         single_parent=True,
     )
