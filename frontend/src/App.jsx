@@ -112,17 +112,17 @@ export default function App() {
   }, [isAuthenticated, loadJobs]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const interval = setInterval(() => {
-      loadJobs();
-      if (selectedJobId) {
-        loadSelectedJob(selectedJobId);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [isAuthenticated, loadJobs, loadSelectedJob, selectedJobId]);
+   if (!isAuthenticated) return;
+   const interval = setInterval(() => {
+     loadJobs();
+     const terminal = ["succeeded", "failed", "cancelled"];
+     if (selectedJobId && !terminal.includes(selectedJob?.status)) 
+   {
+      loadSelectedJob(selectedJobId);
+    }
+  }, 3000);
+  return () => clearInterval(interval);
+}, [isAuthenticated, loadJobs, loadSelectedJob, selectedJobId, selectedJob?.status]);
 
   useEffect(() => {
     if (!isAuthenticated || !selectedJobId) return;
@@ -185,16 +185,19 @@ export default function App() {
     }
   }
 
+  // -- Loading state --
   if (authLoading && !isAuthenticated) {
     return (
       <main className="page page--centered">
-        <div className="panel">
-          <p>Checking session...</p>
+        <div className="panel" style={{ maxWidth: 360, width: "100%", textAlign: "center" }}>
+          <div className="skeleton" style={{ height: 20, marginBottom: 12 }} />
+          <p className="muted">Checking session...</p>
         </div>
       </main>
     );
   }
 
+  // -- Login --
   if (!isAuthenticated) {
     return (
       <main className="page page--centered">
@@ -203,79 +206,97 @@ export default function App() {
     );
   }
 
+  // -- Dashboard --
   return (
     <main className="page">
       <header className="topbar">
         <div>
           <h1>GPU Job Manager</h1>
-          <p className="muted">
-            Demo UI for submission, status tracking, events, artifacts, cancel,
-            and delete.
+          <p className="muted" style={{ fontSize: "0.82rem", marginTop: 4 }}>
+            Submit, track, cancel, and delete async GPU jobs.
           </p>
         </div>
-
         <div className="topbar__actions">
           <div className="user-chip">
             <span className="user-chip__label">Signed in as</span>
-            <strong>{user?.email || "Unknown user"}</strong>
+            <strong>{user?.email || "Unknown"}</strong>
           </div>
-          <button className="button button--secondary" onClick={logout}>
-            Sign out
-          </button>
+          <button className="button button--ghost" onClick={logout}>Sign out</button>
         </div>
       </header>
 
-      {pageError ? <div className="form-error">{pageError}</div> : null}
+      {pageError && (
+        <div className="page-error-banner">
+          <span>? {pageError}</span>
+          <button onClick={() => setPageError("")}>?</button>
+        </div>
+      )}
 
-      <div className="dashboard-stack">
-        <JobSubmitForm onSubmit={handleCreateJob} loading={submitLoading} />
+      <div className="dashboard-layout">
+  {/* Submit bar -- full width */}
+  <div className="dashboard-layout__topbar">
+    <JobSubmitForm onSubmit={handleCreateJob} loading={submitLoading} />
+  </div>
 
-        <div className="dashboard-grid dashboard-grid--main">
-          <div className="dashboard-column">
-            <div className="panel">
-              <div className="panel-header">
-                <h2>Session</h2>
-                <span className="muted">
-                  {jobsLoading ? "Refreshing..." : "Live"}
-                </span>
-              </div>
-              <p className="muted">
-                API base URL: <code>{API_BASE_URL}</code>
-              </p>
-              <p className="muted">
-                Polling jobs and selected job every 3 seconds.
-              </p>
-            </div>
+  {/* Three-column body */}
+  <div className="dashboard-layout__body">
 
-            <JobList
-              jobs={sortedJobs}
-              selectedJobId={selectedJobId}
-              onSelect={setSelectedJobId}
-              onCancel={handleCancelJob}
-              onDelete={handleDeleteJob}
-              actionLoadingId={actionLoadingId}
-            />
+    {/* LEFT: Session + Job List */}
+    <div className="dashboard-column">
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Session</h2>
+          <span className={`live-dot${jobsLoading ? " live-dot--loading" : ""}`}>
+            {jobsLoading ? "Refreshing" : "Live * 3s"}
+          </span>
+        </div>
+        <div className="session-info">
+          <div className="session-row">
+            <span className="session-row__label">API base</span>
+            <span className="session-row__value">{API_BASE_URL}</span>
           </div>
-
-          <div className="dashboard-column">
-            {detailLoading ? (
-              <div className="panel">
-                <p>Loading job detail...</p>
-              </div>
-            ) : (
-              <JobDetail
-                job={selectedJob}
-                artifact={artifact}
-                onCancel={handleCancelJob}
-                onDelete={handleDeleteJob}
-                actionLoading={Boolean(actionLoadingId)}
-              />
-            )}
-
-            <JobEvents events={events} loading={eventsLoading} />
+          <div className="session-row">
+            <span className="session-row__label">Jobs loaded</span>
+            <span className="session-row__value">{jobs.length}</span>
           </div>
         </div>
       </div>
+
+      <JobList
+        jobs={sortedJobs}
+        selectedJobId={selectedJobId}
+        onSelect={setSelectedJobId}
+        onCancel={handleCancelJob}
+        onDelete={handleDeleteJob}
+        actionLoadingId={actionLoadingId}
+      />
+    </div>
+
+    {/* RIGHT: Job Detail + Events */}
+    <div className="dashboard-column">
+      {detailLoading ? (
+        <div className="panel">
+          <div className="panel-header"><h2>Job Detail</h2></div>
+          <div className="stack">
+            <div className="skeleton" style={{ height: 80 }} />
+            <div className="skeleton" style={{ height: 120 }} />
+          </div>
+        </div>
+      ) : (
+        <JobDetail
+          job={selectedJob}
+          artifact={artifact}
+          onCancel={handleCancelJob}
+          onDelete={handleDeleteJob}
+          actionLoading={Boolean(actionLoadingId)}
+        />
+      )}
+      <JobEvents events={events} loading={eventsLoading} />
+    </div>
+
+  </div>
+</div>
+
     </main>
   );
 }

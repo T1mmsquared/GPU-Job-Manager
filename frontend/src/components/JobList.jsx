@@ -1,49 +1,31 @@
 import StatusBadge from "./StatusBadge";
 
-function canCancel(status) {
-  return status === "queued" || status === "running";
-}
+function canCancel(status) { return status === "queued" || status === "running"; }
+function canDelete(status) { return status !== "running"; }
 
-function canDelete(status) {
-  return status !== "running";
-}
-
-export default function JobList({
-  jobs,
-  selectedJobId,
-  onSelect,
-  onCancel,
-  onDelete,
-  actionLoadingId,
-}) {
+export default function JobList({ jobs, selectedJobId, onSelect, onCancel, onDelete, actionLoadingId }) {
   return (
     <div className="panel">
       <div className="panel-header">
         <h2>Jobs</h2>
-        <span className="muted">{jobs.length} total</span>
+        <span className="muted text-xs">{jobs.length} total</span>
       </div>
 
       {jobs.length === 0 ? (
-        <p className="muted">No jobs yet.</p>
+        <div className="empty-state">
+          <span className="empty-state__icon">??</span>
+          <span>No jobs yet. Submit one above.</span>
+        </div>
       ) : (
         <div className="job-list">
           {jobs.map((job) => {
             const active = job.id === selectedJobId;
             const busy = actionLoadingId === job.id;
-
             return (
-              <div
-                key={job.id}
-                role="button"
-                tabIndex={0}
-                className={`job-card ${active ? "job-card--active" : ""}`}
+              <div key={job.id} role="button" tabIndex={0}
+                className={`job-card${active ? " job-card--active" : ""}`}
                 onClick={() => onSelect(job.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelect(job.id);
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(job.id); } }}
               >
                 <div className="job-card__top">
                   <div>
@@ -55,34 +37,19 @@ export default function JobList({
 
                 <div className="job-card__meta">
                   <span>GPU: {job.gpu_id || "pending"}</span>
-                  <span>
-                    Cancel requested: {job.cancel_requested ? "yes" : "no"}
-                  </span>
+                  {job.cancel_requested && <span style={{ color: "var(--status-failed-fg)" }}>? cancel requested</span>}
                 </div>
 
                 <div className="job-card__actions">
-                  <button
-                    type="button"
-                    className="button button--secondary"
+                  <button type="button" className="button button--ghost"
                     disabled={!canCancel(job.status) || busy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCancel(job.id);
-                    }}
-                  >
-                    Cancel
+                    onClick={(e) => { e.stopPropagation(); onCancel(job.id); }}>
+                    {busy ? "..." : "Cancel"}
                   </button>
-
-                  <button
-                    type="button"
-                    className="button button--danger"
+                  <button type="button" className="button button--danger"
                     disabled={!canDelete(job.status) || busy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(job.id);
-                    }}
-                  >
-                    Delete
+                    onClick={(e) => { e.stopPropagation(); onDelete(job.id); }}>
+                    {busy ? "..." : "Delete"}
                   </button>
                 </div>
               </div>

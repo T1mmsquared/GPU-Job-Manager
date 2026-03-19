@@ -74,10 +74,20 @@ export async function createJob(token, payload) {
 }
 
 export async function cancelJob(token, jobId) {
-  return request(`/jobs/${jobId}/cancel`, {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/cancel`, {
     method: "POST",
-    token,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
   });
+  // 409 = job already finished, not a real error
+  if (response.status === 409) return null;
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.detail || `Cancel failed: ${response.status}`);
+  }
+  return response.json().catch(() => null);
 }
 
 export async function deleteJob(token, jobId) {
