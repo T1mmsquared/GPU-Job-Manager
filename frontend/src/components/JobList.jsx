@@ -32,11 +32,18 @@ export default function JobList({
             const busy = actionLoadingId === job.id;
 
             return (
-              <button
+              <div
                 key={job.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 className={`job-card ${active ? "job-card--active" : ""}`}
                 onClick={() => onSelect(job.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelect(job.id);
+                  }
+                }}
               >
                 <div className="job-card__top">
                   <div>
@@ -78,7 +85,7 @@ export default function JobList({
                     Delete
                   </button>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

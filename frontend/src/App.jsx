@@ -65,39 +65,46 @@ export default function App() {
     }
   }, [token, selectedJobId]);
 
-  const loadSelectedJob = useCallback(async () => {
-    if (!token || !selectedJobId) {
-      setSelectedJob(null);
-      setEvents([]);
-      setArtifact(null);
-      return;
-    }
-
-    try {
-      setDetailLoading(true);
-      setEventsLoading(true);
-
-      const [jobData, eventData] = await Promise.all([
-        getJob(token, selectedJobId),
-        getJobEvents(token, selectedJobId),
-      ]);
-
-      setSelectedJob(jobData);
-      setEvents(eventData);
+  const loadSelectedJob = useCallback(
+    async (jobId = selectedJobId) => {
+      if (!token || !jobId) {
+        setSelectedJob(null);
+        setEvents([]);
+        setArtifact(null);
+        return;
+      }
 
       try {
-        const artifactData = await getJobArtifact(token, selectedJobId);
-        setArtifact(artifactData);
+        setDetailLoading(true);
+        setEventsLoading(true);
+
+        const [jobData, eventData] = await Promise.all([
+          getJob(token, jobId),
+          getJobEvents(token, jobId),
+        ]);
+
+        setSelectedJob(jobData);
+        setEvents(eventData);
+
+        if (jobData.status === "succeeded") {
+          try {
+            const artifactData = await getJobArtifact(token, jobId);
+            setArtifact(artifactData);
+          } catch {
+            setArtifact(null);
+          }
+        } else {
+          setArtifact(null);
+        }
       } catch (error) {
-        setArtifact(null);
+        setPageError(error.message || "Failed to load job detail");
+      } finally {
+        setDetailLoading(false);
+        setEventsLoading(false);
       }
-    } catch (error) {
-      setPageError(error.message || "Failed to load job detail");
-    } finally {
-      setDetailLoading(false);
-      setEventsLoading(false);
-    }
-  }, [token, selectedJobId]);
+    },
+    [token, selectedJobId]
+  );
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -110,7 +117,7 @@ export default function App() {
     const interval = setInterval(() => {
       loadJobs();
       if (selectedJobId) {
-        loadSelectedJob();
+        loadSelectedJob(selectedJobId);
       }
     }, 3000);
 
@@ -119,7 +126,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuthenticated || !selectedJobId) return;
-    loadSelectedJob();
+    loadSelectedJob(selectedJobId);
   }, [isAuthenticated, selectedJobId, loadSelectedJob]);
 
   async function handleCreateJob(payload) {
@@ -130,7 +137,7 @@ export default function App() {
       const created = await createJob(token, payload);
       await loadJobs();
       setSelectedJobId(created.id);
-      await loadSelectedJob();
+      await loadSelectedJob(created.id);
     } catch (error) {
       setPageError(error.message || "Failed to create job");
       throw error;
@@ -147,7 +154,7 @@ export default function App() {
       await cancelJob(token, jobId);
       await loadJobs();
       if (selectedJobId === jobId) {
-        await loadSelectedJob();
+        await loadSelectedJob(jobId);
       }
     } catch (error) {
       setPageError(error.message || "Failed to cancel job");
@@ -166,6 +173,7 @@ export default function App() {
       await loadJobs();
 
       if (wasSelected) {
+        setSelectedJobId("");
         setSelectedJob(null);
         setEvents([]);
         setArtifact(null);
@@ -227,7 +235,9 @@ export default function App() {
             <div className="panel">
               <div className="panel-header">
                 <h2>Session</h2>
-                <span className="muted">{jobsLoading ? "Refreshing..." : "Live"}</span>
+                <span className="muted">
+                  {jobsLoading ? "Refreshing..." : "Live"}
+                </span>
               </div>
               <p className="muted">
                 API base URL: <code>{API_BASE_URL}</code>

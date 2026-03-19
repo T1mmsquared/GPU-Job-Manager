@@ -1,14 +1,16 @@
 # GPU Job Manager
 
-GPU Job Manager is an authenticated backend system for submitting, tracking, and executing asynchronous GPU model jobs.
+GPU Job Manager is an authenticated system for submitting, tracking, and executing asynchronous GPU model jobs.
 
 It combines the API and persistence foundation from `gpu-job-management-api` with worker-side execution logic adapted from League of Doom.
 
 ## Current status
 
-The project now has a working backend vertical slice, plus cooperative cancellation support.
+The project now has a working backend vertical slice, cooperative cancellation support, and an in-progress React demo UI.
 
 ### Completed so far
+
+#### Backend
 
 - Docker Compose stack for API, worker, PostgreSQL, and Redis.
 - Alembic-backed database schema and migrations.
@@ -28,7 +30,21 @@ The project now has a working backend vertical slice, plus cooperative cancellat
 - Cancellation event history.
 - Restart-safe queued cancellation guard in the worker.
 
-### Validated behavior
+#### Frontend
+
+- React + Vite frontend scaffolded under `frontend/`.
+- Basic authenticated demo UI created for login, submission, and tracking.
+- Frontend-to-backend connectivity configured for LAN access.
+- CORS enabled in FastAPI for frontend development origins.
+- Login screen validated from a browser on the same network.
+- Authenticated dashboard shell loads after successful login.
+- Jobs list, job detail, and job events polling integrated into the UI.
+- Artifact handling improved so missing artifacts can be treated as an expected state for non-succeeded jobs.
+- `JobList.jsx` and `App.jsx` revised to clean up selection behavior and reduce invalid artifact fetches.
+
+## Validated behavior
+
+### Backend behavior
 
 - A user can register and log in.
 - A user can submit a job.
@@ -42,6 +58,19 @@ The project now has a working backend vertical slice, plus cooperative cancellat
 - `POST /jobs/{job_id}/cancel` requests cancellation for running jobs and the worker transitions them to `cancelled`.
 - Cancelled jobs do not create artifacts.
 - Cancelling a terminal job returns `409 Conflict`.
+
+### Frontend behavior
+
+- The frontend is reachable from a browser on the local network.
+- The login page loads successfully.
+- Login works when the frontend points to the reachable backend host.
+- The authenticated dashboard renders after login.
+- The frontend can call:
+  - `GET /jobs`
+  - `GET /jobs/{job_id}`
+  - `GET /jobs/{job_id}/events`
+- The frontend is polling jobs and selected job detail on an interval.
+- Artifact `404 Not Found` responses are currently expected for jobs that do not have artifacts yet or for terminal non-success states.
 
 ## Implemented routes
 
@@ -82,17 +111,58 @@ Current job statuses in use:
 - `cancel_requested` is persisted so the worker can stop safely.
 - The worker checks cancellation state before starting execution and during the simulated run loop.
 
+## Frontend notes
+
+The frontend is currently intended as a small demo UI rather than a polished production interface.
+
+Current UI scope:
+
+- Login form.
+- Job submission form.
+- Jobs list.
+- Job detail view.
+- Job events view.
+- Cancel and delete controls.
+
+Current frontend caveats:
+
+- The UI still needs final validation for full success, failure, cancel, and delete flows end to end.
+- Artifact fetches should only be attempted for `succeeded` jobs.
+- The job list card structure was revised to avoid nested button markup.
+- Additional UX polish is still needed for loading states, empty states, and API error presentation.
+
+## What works right now
+
+From the browser demo UI, the following are currently in place:
+
+1. Load the frontend from the LAN-accessible Vite URL.
+2. Log in with a valid backend user.
+3. Reach the authenticated dashboard.
+4. Load jobs from the API.
+5. Load selected job detail.
+6. Load selected job events.
+7. Poll the backend for updates.
+
 ## What to do next
 
 Recommended next steps, in order:
 
-1. Explicitly verify cascade behavior on deleted jobs for events and artifacts.
-2. Replace the simulated worker path with a more real model execution path.
-3. Finish the tiny demo UI for login, submission, and tracking.
-4. Add clearer GPU assignment behavior beyond `gpu_id="local-sim"`.
-5. Add list filtering and pagination polish where useful.
-6. Prepare deployment and architecture deliverables.
-7. Address the Celery container user warning cleanly.
+1. Finish frontend validation for:
+   - successful job flow,
+   - failed job flow,
+   - cancel flow,
+   - delete flow.
+2. Clean up remaining frontend UX issues:
+   - empty states,
+   - better error handling,
+   - clearer loading feedback,
+   - artifact visibility rules.
+3. Explicitly verify cascade behavior on deleted jobs for events and artifacts.
+4. Replace the simulated worker path with a more real model execution path.
+5. Add clearer GPU assignment behavior beyond `gpu_id="local-sim"`.
+6. Add list filtering and pagination polish where useful.
+7. Prepare deployment and architecture deliverables.
+8. Address the Celery container user warning cleanly.
 
 ## Resume checklist
 
@@ -100,11 +170,13 @@ When you come back to the project, use this order:
 
 1. Start the containers.
 2. Confirm API health.
-3. Register or log in.
-4. Export a fresh token.
-5. Run the smoke test.
-6. Review logs if anything fails.
-7. Continue with the next planned feature.
+3. Start the frontend dev server.
+4. Confirm the frontend is pointing to the correct backend host.
+5. Register or log in.
+6. Export a fresh token if using shell scripts.
+7. Run the smoke test if backend behavior needs revalidation.
+8. Validate the frontend flow against the live API.
+9. Continue with the next planned feature.
 
 ## Working bash scripts
 
@@ -263,6 +335,7 @@ Notes
 -Avoid double backslashes in pasted shell commands.
 -Re-login after restarting or recreating services if you no longer have a valid token in your shell.
 -Re-register only if login says the user does not exist or the database was reset.
+-When testing the frontend from another machine on the LAN, use the backend host IP in frontend/.env instead of localhost.
 
 Near-term deliverables
 Backend deliverables now mostly complete:
@@ -274,6 +347,15 @@ Backend deliverables now mostly complete:
 -Events and artifact reads.
 -Delete rules.
 -Cancellation flow.
+
+Frontend deliverables in progress:
+
+-Simple demo UI.
+-Login flow.
+-Job listing and detail.
+-Events display.
+-Artifact handling.
+-Cancel and delete actions.
 
 Remaining short-term deliverables:
 
